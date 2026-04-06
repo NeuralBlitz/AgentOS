@@ -1,0 +1,5 @@
+{
+  "name": "AgentOS Tripartite Framework",
+  "description": "A visual interface for the Tripartite Agentic Framework featuring Planner, Executor, and Reviewer agents.",
+  "requestFramePermissions": ["camera", "microphone", "display-capture"]
+}
