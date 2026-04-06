@@ -55,7 +55,6 @@ import { MediaSidebar } from "./components/MediaSidebar";
 import { LiveSidebar } from "./components/LiveSidebar";
 import { MusicPlayer } from "./components/MusicPlayer";
 import { TaskDependencyGraph } from "./components/TaskDependencyGraph";
-import { VersionControlPanel } from "./components/VersionControlPanel";
 import { MarkdownRenderer } from "./components/MarkdownRenderer";
 import { runToolWithFailsafe } from "./services/ToolRunner";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
@@ -316,9 +315,6 @@ export default function App() {
     }
 
     executeTask(task);
-  };
-      addLog("system", `Pipelined task to ${targetMode} agent: ${task.text}`);
-    }
   };
 
   const handleChatSubmit = async (text: string) => {
@@ -1100,9 +1096,6 @@ export default function App() {
 
         {/* GITHUB SIDEBAR */}
         {mode === 'github' && (
-          <GitHubSidebar />
-        )}
-        {mode === 'github' && (
           <div className="flex-1 flex flex-col min-w-0 p-6 relative">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-indigo-400 flex items-center gap-2 metallic-text"><Box className="w-6 h-6" /> GitHub Repository</h2>
@@ -1285,7 +1278,7 @@ export default function App() {
             </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto space-y-4 mb-6 custom-scrollbar pr-2">
+          <div className="flex-1 overflow-y-auto space-y-4 mb-6 custom-scrollbar pr-2 min-h-0">
             {chatLogs.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-30">
                 <MessageSquare className="w-20 h-20 mb-4 stroke-[1px]" />

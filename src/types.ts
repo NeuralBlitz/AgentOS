@@ -5,9 +5,12 @@ export type AppMode = 'agentos' | 'chat' | 'orchestrator' | 'explorer' | 'media'
 
 export interface Task {
   id: string;
-  title: string;
+  text: string;
   status: 'todo' | 'in-progress' | 'done';
-  priority: 'high' | 'medium' | 'low';
+  priority: 'low' | 'medium' | 'high';
+  assignedAgent?: 'agentos' | 'chat' | 'orchestrator' | 'explorer' | 'media' | 'live' | 'github';
+  dependencies: string[];
+  dueDate: string | null;
 }
 
-export { MemoryResult };
+export type { MemoryResult };
