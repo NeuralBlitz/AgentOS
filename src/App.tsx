@@ -48,12 +48,21 @@ import { runPlanner, runExecutor, runReviewer, runChat, generateMediaImage, gene
 import { memoryCore, MemoryResult } from "./lib/memory";
 import { LiveVideoChat } from "./lib/live";
 import { motion, AnimatePresence } from "motion/react";
+import { AgentOSSidebar } from "./components/AgentOSSidebar";
+import { OrchestratorSidebar } from "./components/OrchestratorSidebar";
+import { ExplorerSidebar } from "./components/ExplorerSidebar";
+import { MediaSidebar } from "./components/MediaSidebar";
+import { LiveSidebar } from "./components/LiveSidebar";
+import { MusicPlayer } from "./components/MusicPlayer";
+import { TaskDependencyGraph } from "./components/TaskDependencyGraph";
+import { VersionControlPanel } from "./components/VersionControlPanel";
 import { MarkdownRenderer } from "./components/MarkdownRenderer";
+import { runToolWithFailsafe } from "./services/ToolRunner";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { format, parseISO, isValid } from "date-fns";
 
 type AgentStatus = "idle" | "working" | "done" | "error";
-type AppMode = 'agentos' | 'chat' | 'orchestrator' | 'explorer' | 'media' | 'live';
+type AppMode = 'agentos' | 'chat' | 'orchestrator' | 'explorer' | 'media' | 'live' | 'github';
 
 interface Task {
   id: string;
@@ -264,6 +273,35 @@ export default function App() {
     setTasks(tasks.map(t => t.id === id ? { ...t, [field]: value } : t));
   };
 
+  const executeTask = async (task: Task) => {
+    const targetMode = task.assignedAgent || mode;
+    
+    const result = await runToolWithFailsafe(
+      `Task-${task.id}`,
+      async () => {
+        if (targetMode === 'agentos') {
+          handleRunCycle(task.text);
+        } else if (targetMode === 'chat') {
+          handleChatSubmit(task.text);
+        } else if (targetMode === 'media') {
+          handleMediaGenerate(task.text);
+        } else if (targetMode === 'explorer') {
+          handleExplorerSubmit(task.text, task.id);
+        } else if (targetMode === 'orchestrator') {
+          handleOrchestratorSubmit(task.text);
+        }
+        return { status: "completed" };
+      },
+      addLog
+    );
+
+    if (result.success) {
+      updateTaskField(task.id, 'status', 'done');
+    } else {
+      addLog("system", `Task ${task.id} failed: ${result.error}`, "error");
+    }
+  };
+
   const pipelineTask = (task: Task) => {
     // Check dependencies
     if (task.dependencies && task.dependencies.length > 0) {
@@ -277,18 +315,8 @@ export default function App() {
       }
     }
 
-    const targetMode = task.assignedAgent || mode;
-    if (targetMode === 'agentos') {
-      handleRunCycle(task.text);
-    } else if (targetMode === 'chat') {
-      handleChatSubmit(task.text);
-    } else if (targetMode === 'media') {
-      handleMediaGenerate(task.text);
-    } else if (targetMode === 'explorer') {
-      handleExplorerSubmit(task.text, task.id);
-    } else if (targetMode === 'orchestrator') {
-      handleOrchestratorSubmit(task.text);
-    } else {
+    executeTask(task);
+  };
       addLog("system", `Pipelined task to ${targetMode} agent: ${task.text}`);
     }
   };
@@ -475,6 +503,16 @@ export default function App() {
               addLog("system", `Live Agent initiated exploration: ${args.query}`, "success");
               setLiveLogs(prev => [...prev.slice(-10), { message: `Exploration started: ${args.query}`, type: 'success' }]);
               return { status: "Exploration started" };
+            }
+            if (name === 'generateMedia') {
+              if (args.type === 'image') {
+                await generateMediaImage(args.prompt);
+              } else {
+                await generateMediaVideo(args.prompt);
+              }
+              addLog("system", `Live Agent generated ${args.type}: ${args.prompt}`, "success");
+              setLiveLogs(prev => [...prev.slice(-10), { message: `Media generated: ${args.prompt}`, type: 'success' }]);
+              return { status: "Media generated successfully" };
             }
             if (name === 'getAppState') {
               return {
@@ -880,6 +918,8 @@ export default function App() {
         </motion.div>
       </AnimatePresence>
 
+      <MusicPlayer />
+
       {/* LEFT NAV: Mode Switcher */}
       <div className="w-16 bg-[#050505] border-r border-[#222] flex flex-col items-center py-6 gap-6 flex-shrink-0 z-50 glass-panel !bg-black/40">
         <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-900/20 mb-4 group cursor-pointer relative">
@@ -929,6 +969,13 @@ export default function App() {
         >
           <Video className="w-6 h-6" />
         </button>
+        <button 
+          onClick={() => setMode('github')} 
+          className={`p-2 rounded-xl transition-all hover:scale-110 active:scale-95 ${mode === 'github' ? 'bg-indigo-500/20 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.2)]' : 'text-gray-500 hover:text-gray-300'}`} 
+          title="GitHub Agent"
+        >
+          <Box className="w-6 h-6" />
+        </button>
       </div>
 
       {/* LEFT SIDEBAR: Dynamic based on Mode */}
@@ -946,12 +993,14 @@ export default function App() {
               {mode === 'explorer' && <Globe className="w-5 h-5 text-orange-400" />}
               {mode === 'media' && <ImageIcon className="w-5 h-5 text-pink-400" />}
               {mode === 'live' && <Video className="w-5 h-5 text-red-400" />}
+              {mode === 'github' && <Box className="w-5 h-5 text-indigo-400" />}
               <h1 className="font-bold tracking-wider text-sm uppercase metallic-text">
                 {mode === 'agentos' ? 'AgentOS Core' : 
                  mode === 'chat' ? 'Conversational' :
                  mode === 'orchestrator' ? 'Orchestration' :
                  mode === 'explorer' ? 'Explorer' :
-                 mode === 'media' ? 'Media Studio' : 'Live Core'}
+                 mode === 'media' ? 'Media Studio' : 
+                 mode === 'live' ? 'Live Core' : 'GitHub Agent'}
               </h1>
             </div>
             <div className="flex gap-1">
@@ -966,83 +1015,16 @@ export default function App() {
 
         {/* AGENTOS SIDEBAR */}
         {mode === 'agentos' && (
-          <>
-            <div className="mb-8">
-              <h2 className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-4 flex items-center gap-2 metallic-text">
-                <Database className="w-4 h-4" /> Memory Core
-              </h2>
-              <div className="glass-panel border-white/5 rounded-2xl p-4 text-[10px] text-gray-400 space-y-4 shadow-lg">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-medium">Status:</span>
-                  <span className="text-emerald-400 font-bold">Online</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-medium">Vectors:</span>
-                  <span className="text-blue-400 font-mono">1,024</span>
-                </div>
-                {activeMemories.length > 0 && (
-                  <div className="pt-4 border-t border-white/5">
-                    <p className="text-gray-500 font-bold uppercase tracking-widest text-[8px] mb-3">Active Context:</p>
-                    <div className="space-y-2">
-                      {activeMemories.map(mem => (
-                        <div key={mem.id} className="bg-black/40 p-3 rounded-xl border border-white/5 shadow-inner">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-emerald-400 text-[8px] font-bold uppercase tracking-widest">{mem.type}</span>
-                            <span className="text-blue-400 text-[8px] font-mono">{(mem.confidence * 100).toFixed(0)}% Match</span>
-                          </div>
-                          <p className="text-gray-300 truncate text-[9px] leading-relaxed" title={mem.content}>{mem.key ? `${mem.key}: ` : ''}{mem.content}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div className="pt-4 border-t border-white/5">
-                  <span className="text-gray-500 font-bold uppercase tracking-widest text-[8px] block mb-2">CWD:</span>
-                  <span className="truncate block text-emerald-500 font-mono bg-black/40 p-2 rounded-lg border border-white/5">{currentDir}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-8">
-              <h2 className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-4 flex items-center gap-2 metallic-text">
-                <Settings className="w-4 h-4" /> Sandbox Config
-              </h2>
-              <div className="glass-panel border-white/5 rounded-2xl p-4 flex flex-col gap-4 text-[10px] shadow-lg">
-                <div>
-                  <label className="block text-gray-500 font-bold uppercase tracking-widest text-[8px] mb-2">Image Override</label>
-                  <input type="text" value={sandboxConfig.image} onChange={e => setSandboxConfig({...sandboxConfig, image: e.target.value})} placeholder="e.g., ubuntu:latest" className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-gray-200 focus:outline-none focus:border-blue-500/50 transition-colors" />
-                </div>
-                <div>
-                  <label className="block text-gray-500 font-bold uppercase tracking-widest text-[8px] mb-2">Network</label>
-                  <select value={sandboxConfig.network} onChange={e => setSandboxConfig({...sandboxConfig, network: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-gray-200 focus:outline-none focus:border-blue-500/50 transition-colors">
-                    <option value="auto">Auto</option>
-                    <option value="enabled">Enabled</option>
-                    <option value="disabled">Disabled</option>
-                  </select>
-                </div>
-                <div className="pt-2 border-t border-white/5">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <div className="w-10 h-5 bg-gray-800 rounded-full relative transition-colors group-hover:bg-gray-700">
-                      <div className="absolute left-1 top-1 w-3 h-3 bg-gray-500 rounded-full transition-transform" />
-                    </div>
-                    <span className="text-gray-500 font-medium">Auto-Cleanup</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h2 className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-4 flex items-center gap-2 metallic-text">
-                <Cpu className="w-4 h-4" /> System Status
-              </h2>
-              <div className="space-y-3">
-                <StatusIndicator label="Planner" status={plannerStatus} />
-                <StatusIndicator label="Executor" status={executorStatus} />
-                <StatusIndicator label="Reviewer" status={reviewerStatus} />
-                <StatusIndicator label="Sandbox" status={sandboxStatus} />
-              </div>
-            </div>
-          </>
+          <AgentOSSidebar 
+            activeMemories={activeMemories}
+            currentDir={currentDir}
+            sandboxConfig={sandboxConfig}
+            setSandboxConfig={setSandboxConfig}
+            plannerStatus={plannerStatus}
+            executorStatus={executorStatus}
+            reviewerStatus={reviewerStatus}
+            sandboxStatus={sandboxStatus}
+          />
         )}
 
         {/* CHAT SIDEBAR */}
@@ -1098,177 +1080,37 @@ export default function App() {
 
         {/* ORCHESTRATOR SIDEBAR */}
         {mode === 'orchestrator' && (
-          <>
-            <div className="mb-8">
-              <h2 className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-4 flex items-center gap-2 metallic-text">
-                <BarChart className="w-4 h-4" /> Project Stats
-              </h2>
-              <div className="glass-panel border-white/5 rounded-2xl p-5 shadow-lg space-y-5">
-                <div className="flex justify-between items-center text-[10px] uppercase tracking-widest font-bold">
-                  <span className="text-gray-500">Total Tasks</span>
-                  <span className="text-white">{tasks.length}</span>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between text-[9px] uppercase tracking-widest font-bold">
-                    <span className="text-emerald-400">Done</span>
-                    <span className="text-gray-400">{tasks.filter(t => t.status === 'done').length}</span>
-                  </div>
-                  <div className="w-full bg-black/60 h-2 rounded-full overflow-hidden border border-white/5">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${(tasks.filter(t => t.status === 'done').length / (tasks.length || 1)) * 100}%` }}
-                      className="bg-emerald-500 h-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" 
-                    />
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between text-[9px] uppercase tracking-widest font-bold">
-                    <span className="text-blue-400">In Progress</span>
-                    <span className="text-gray-400">{tasks.filter(t => t.status === 'in-progress').length}</span>
-                  </div>
-                  <div className="w-full bg-black/60 h-2 rounded-full overflow-hidden border border-white/5">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${(tasks.filter(t => t.status === 'in-progress').length / (tasks.length || 1)) * 100}%` }}
-                      className="bg-blue-500 h-full shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="mb-8">
-              <h2 className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-4 flex items-center gap-2 metallic-text">
-                <Filter className="w-4 h-4" /> Priority View
-              </h2>
-              <div className="flex flex-col gap-3">
-                {['high', 'medium', 'low'].map(p => (
-                  <div key={p} className="flex items-center justify-between glass-panel border-white/5 p-3 rounded-2xl text-[10px] shadow-md hover:border-white/10 transition-all">
-                    <span className={`uppercase tracking-widest font-bold ${p === 'high' ? 'text-red-400' : p === 'medium' ? 'text-orange-400' : 'text-blue-400'}`}>{p}</span>
-                    <span className="text-gray-500 font-mono">{tasks.filter(t => t.priority === p).length}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
+          <OrchestratorSidebar tasks={tasks} />
         )}
 
         {/* EXPLORER SIDEBAR */}
         {mode === 'explorer' && (
-          <>
-            <div className="mb-8">
-              <h2 className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-4 flex items-center gap-2 metallic-text">
-                <History className="w-4 h-4" /> Research History
-              </h2>
-              <div className="space-y-3">
-                {explorerLogs.slice(-5).reverse().map((log, i) => (
-                  <div key={i} className="glass-panel border-white/5 rounded-2xl p-3 text-[10px] text-gray-400 truncate hover:text-white hover:border-orange-500/30 cursor-pointer transition-all shadow-md">
-                    {log.query}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="mb-8">
-              <h2 className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-4 flex items-center gap-2 metallic-text">
-                <Globe className="w-4 h-4" /> Active Sources
-              </h2>
-              <div className="glass-panel border-white/5 rounded-2xl p-4 text-[10px] space-y-3 shadow-lg">
-                <div className="flex items-center gap-3 text-emerald-400 font-bold">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                  Google Search
-                </div>
-                <div className="flex items-center gap-3 text-gray-500">
-                  <div className="w-2 h-2 rounded-full bg-gray-700" />
-                  Local File System
-                </div>
-                <div className="flex items-center gap-3 text-gray-500">
-                  <div className="w-2 h-2 rounded-full bg-gray-700" />
-                  External API Proxy
-                </div>
-              </div>
-            </div>
-          </>
+          <ExplorerSidebar explorerLogs={explorerLogs} />
         )}
 
         {/* MEDIA SIDEBAR */}
         {mode === 'media' && (
-          <>
-            <div className="mb-8">
-              <h2 className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-4 flex items-center gap-2 metallic-text">
-                <Maximize className="w-4 h-4" /> Studio Settings
-              </h2>
-              <div className="glass-panel border-white/5 rounded-2xl p-4 text-[10px] space-y-4 shadow-lg">
-                <div>
-                  <label className="block text-gray-500 font-bold uppercase tracking-widest text-[8px] mb-2">Aspect Ratio</label>
-                  <select className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-gray-200 focus:outline-none focus:border-pink-500/50 transition-colors">
-                    <option>1:1 (Square)</option>
-                    <option>16:9 (Landscape)</option>
-                    <option>9:16 (Portrait)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-gray-500 font-bold uppercase tracking-widest text-[8px] mb-2">Quality</label>
-                  <select className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-gray-200 focus:outline-none focus:border-pink-500/50 transition-colors">
-                    <option>Standard</option>
-                    <option>HD (1080p)</option>
-                    <option>Ultra (4K)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div className="mb-8">
-              <h2 className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-4 flex items-center gap-2 metallic-text">
-                <ImageIcon className="w-4 h-4" /> Gallery
-              </h2>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="aspect-square glass-panel border-white/5 rounded-2xl flex items-center justify-center text-gray-700 hover:border-pink-500/30 transition-all cursor-pointer group shadow-md">
-                  <ImageIcon className="w-6 h-6 group-hover:text-pink-500/40 transition-colors" />
-                </div>
-                <div className="aspect-square glass-panel border-white/5 rounded-2xl flex items-center justify-center text-gray-700 hover:border-pink-500/30 transition-all cursor-pointer group shadow-md">
-                  <ImageIcon className="w-6 h-6 group-hover:text-pink-500/40 transition-colors" />
-                </div>
-              </div>
-            </div>
-          </>
+          <MediaSidebar />
         )}
 
         {/* LIVE SIDEBAR */}
         {mode === 'live' && (
-          <>
-            <div className="mb-8">
-              <h2 className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-4 flex items-center gap-2 metallic-text">
-                <Activity className="w-4 h-4" /> Session Telemetry
-              </h2>
-              <div className="glass-panel border-white/5 rounded-2xl p-4 text-[10px] space-y-4 shadow-lg">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-medium">Latency:</span>
-                  <span className="text-emerald-400 font-mono font-bold">142ms</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-medium">Frame Rate:</span>
-                  <span className="text-blue-400 font-mono font-bold">2 FPS</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-medium">Bitrate:</span>
-                  <span className="text-purple-400 font-mono font-bold">1.2 Mbps</span>
-                </div>
-              </div>
+          <LiveSidebar />
+        )}
+
+        {/* GITHUB SIDEBAR */}
+        {mode === 'github' && (
+          <GitHubSidebar />
+        )}
+        {mode === 'github' && (
+          <div className="flex-1 flex flex-col min-w-0 p-6 relative">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-indigo-400 flex items-center gap-2 metallic-text"><Box className="w-6 h-6" /> GitHub Repository</h2>
             </div>
-            <div className="mb-8">
-              <h2 className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-4 flex items-center gap-2 metallic-text">
-                <Zap className="w-4 h-4" /> Tool Permissions
-              </h2>
-              <div className="space-y-3">
-                {['Task Creation', 'Exploration', 'System Control'].map(tool => (
-                  <div key={tool} className="flex items-center justify-between glass-panel border-white/5 p-3 rounded-2xl text-[10px] shadow-md hover:border-white/10 transition-colors">
-                    <span className="text-gray-300 font-medium">{tool}</span>
-                    <div className="w-10 h-5 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center px-1">
-                      <div className="w-3 h-3 bg-emerald-500 rounded-full ml-auto shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="flex-1 glass-panel !bg-black/40 border-white/5 rounded-3xl p-6 flex items-center justify-center text-gray-600">
+              <p className="text-sm uppercase tracking-[0.3em]">Repository Content Placeholder</p>
             </div>
-          </>
+          </div>
         )}
       </div>
     </motion.div>
@@ -1614,6 +1456,7 @@ export default function App() {
               </div>
             </div>
             <div className="flex gap-4 items-center">
+              <TaskDependencyGraph tasks={tasks} />
               <div className="relative group">
                 <div className="absolute -inset-0.5 bg-purple-500/20 rounded-xl blur opacity-25 group-focus-within:opacity-100 transition-opacity" />
                 <div className="relative flex items-center glass-panel !bg-black/60 border-white/10 rounded-xl px-3 py-1.5">

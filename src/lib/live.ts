@@ -148,14 +148,15 @@ If the user asks for research, you can suggest tasks for the Explorer.`,
                   }
                 },
                 {
-                  name: "startExploration",
-                  description: "Start a research task with the Explorer sub-agent",
+                  name: "generateMedia",
+                  description: "Generate an image or video using the Media Studio",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
-                      query: { type: Type.STRING, description: "The research query" }
+                      prompt: { type: Type.STRING, description: "The media generation prompt" },
+                      type: { type: Type.STRING, enum: ["image", "video"], description: "Media type" }
                     },
-                    required: ["query"]
+                    required: ["prompt", "type"]
                   }
                 },
                 {
