@@ -21,7 +21,6 @@
     "date-fns": "^4.1.0",
     "dockerode": "^4.0.10",
     "dotenv": "^17.2.3",
-    "eventemitter2": "^6.4.9",
     "express": "^4.21.2",
     "katex": "^0.16.45",
     "lucide-react": "^0.546.0",

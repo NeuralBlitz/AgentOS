@@ -1,6 +1,6 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import { EventEmitter2 } from 'eventemitter2';
+import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface ISession {
@@ -27,7 +27,7 @@ export interface IGatewayConfig {
  * Serves as the central nervous system for AgentOS.
  * Handles WebSockets, connection routing, agent presence, and stream chunking.
  */
-export class GatewayControlPlane extends EventEmitter2 {
+export class GatewayControlPlane extends EventEmitter {
   public readonly io: Server;
   public readonly activeSessions = new Map<string, ISession>();
   public readonly presence = new Map<string, { status: 'online'|'idle'|'offline', lastSeen: number }>();
@@ -40,7 +40,8 @@ export class GatewayControlPlane extends EventEmitter2 {
   };
 
   constructor(server: HttpServer) {
-    super({ wildcard: true });
+    super();
+    this.setMaxListeners(100);
     
     this.io = new Server(server, {
       cors: { origin: '*', methods: ['GET', 'POST'] },

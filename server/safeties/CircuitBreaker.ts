@@ -1,4 +1,4 @@
-import { EventEmitter2 } from 'eventemitter2';
+import { EventEmitter } from 'events';
 
 export interface CircuitBreakerOptions {
   failureThreshold: number;
@@ -18,7 +18,7 @@ export type CircuitState = typeof CircuitState[keyof typeof CircuitState];
  * Enterprise Production Grade Circuit Breaker
  * Prevents cascading failures when integrating with 400+ external systems.
  */
-export class CircuitBreaker extends EventEmitter2 {
+export class CircuitBreaker extends EventEmitter {
   private state: CircuitState = CircuitState.CLOSED;
   private failureCount: number = 0;
   private nextAttemptTime: number = 0;
@@ -27,7 +27,8 @@ export class CircuitBreaker extends EventEmitter2 {
   public readonly serviceName: string;
 
   constructor(serviceName: string, options?: Partial<CircuitBreakerOptions>) {
-    super({ wildcard: true, maxListeners: 100 });
+    super();
+    this.setMaxListeners(100);
     this.serviceName = serviceName;
     this.options = {
       failureThreshold: 5,
