@@ -12,6 +12,8 @@ import { GatewayControlPlane } from './server/core/GatewayControlPlane.ts';
 import { IntegrationRegistry } from './server/tools/IntegrationRegistry.ts';
 import { ChannelManager } from './server/channels/ChannelManager.ts';
 import { AgentRuntime } from './server/agents/AgentRuntime.ts';
+import { DockerSandboxManager } from './server/sandbox/DockerSandboxManager.ts';
+import { BrowserAutomation } from './server/tools/native/BrowserAutomation.ts';
 import { loadN8nFrameworkPolyfills } from './server/tools/n8n/SkeletonLoader.ts';
 
 const execPromise = util.promisify(exec);
@@ -51,6 +53,12 @@ async function startServer() {
     streaming: 'tool',
     failoverModels: ['gemini-3.1-pro-preview', 'gemini-3-flash-preview']
   });
+  
+  // === NATIVE HIGH-PRIVILEGE TOOLS ===
+  // Initialize Docker Manager and mount the Stealth Browser Automation Tool
+  const sandboxManager = new DockerSandboxManager();
+  const browserTool = new BrowserAutomation(sandboxManager);
+  await toolRegistry.register(browserTool);
   
   // Load massive n8n-style integration suite (400+ tool mock skeletons)
   loadN8nFrameworkPolyfills(toolRegistry);
