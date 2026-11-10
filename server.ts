@@ -43,6 +43,21 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Fail closed for privileged operations until a separate authenticated
+  // authorization layer has been designed and reviewed. Do not expose these
+  // routes to untrusted clients, even when an upstream proxy is present.
+  const privilegedApiDisabled = (_req: express.Request, res: express.Response) => {
+    res.status(403).json({ error: 'Privileged API disabled pending security review' });
+  };
+  app.use([
+    '/api/host/execute',
+    '/api/wsl/execute',
+    '/api/sandbox/execute',
+    '/api/gateway/tools/execute',
+    '/api/monitor/add',
+    '/api/monitor/remove',
+  ], privilegedApiDisabled);
+
   // === ENTERPRISE GATEWAY CONTROL PLANE ===
   // Initialize WebSockets, Presence, Channels, and Tools
   const gateway = new GatewayControlPlane(httpServer);
